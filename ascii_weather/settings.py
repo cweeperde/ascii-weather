@@ -152,8 +152,8 @@ def run(config):
                     typing = None
                 elif key == "backspace":
                     typing = typing[:-1]
-                elif len(key) == 1 and key.isprintable():
-                    typing += key
+                elif len(key) == 1 and key.isprintable() and len(typing) < 28:
+                    typing += key  # the input field in the panel is 28 columns wide
                 continue
             if key in ("esc", "q"):
                 break

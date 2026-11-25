@@ -62,8 +62,10 @@ class UpdateCheck:
 
     def finish(self):
         """Call after leaving fullscreen: saves what the check found and prints the notice if there is an update."""
-        if self.thread is not None and not self.thread.is_alive():
-            settings.save_config(self.config)
+        if self.thread is not None:
+            self.thread.join(3)  # a check that just finished should not be lost
+            if not self.thread.is_alive():
+                settings.save_config(self.config)
         latest = self.config.get("latest_version")
         if self.current and latest and not is_editable_install() and parse_version(latest) > parse_version(self.current):
             print(f"[notice] A new release of ascii-weather is available: {self.current} -> {latest}")

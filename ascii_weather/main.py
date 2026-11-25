@@ -26,6 +26,10 @@ def main():
     if args[:1] in (["-V"], ["--version"]):
         print(f"ascii-weather {update.installed_version() or 'dev'}")
         return
+    for arg in args:
+        if arg.startswith("-") and len(arg) > 1:
+            print(f"weather: unknown option '{arg}' (try 'weather --help')", file=sys.stderr)
+            sys.exit(1)
     config = settings.load_config()
     try:
         if args == ["settings"]:
@@ -261,9 +265,13 @@ def local_now(data):
 
 
 def current_hour_index(data):
+    """The current hour, or the first one to come after it, so no past hours are ever shown."""
     key = local_now(data).strftime("%Y-%m-%dT%H:00")
     times = data["hourly"]["time"]
-    return times.index(key) if key in times else 0
+    for i, text in enumerate(times):
+        if text >= key:
+            return i
+    return max(0, len(times) - 1)
 
 
 def clock_time(moment, config):
