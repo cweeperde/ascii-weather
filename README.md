@@ -32,9 +32,20 @@ weather                  weather for your location
 weather berlin           weather for a city
 weather paris, texas     add a country or region after a comma if the city name is ambiguous
 weather settings         settings menu
+weather help             help with all commands and flags
 ```
 
-The fullscreen view shows an animated ASCII scene: a little house and a tree that changes with the seasons, with the sun moving along its arc, a crescent moon with twinkling and shooting stars, drifting clouds, fog, rain with puddles, snow, or thunderstorms. It uses only text colors, so it also looks right in terminals with a transparent background. Next to it are the current temperature, feels-like temperature, wind, humidity, UV index, sunrise and sunset, air quality and pollen, then an hourly and a 7-day forecast. In small windows it shows only the scene and the temperature.
+Flags change one run without touching the settings:
+
+```
+--units metric|imperial   °C, km/h or °F, mph
+--12h / --24h             time format
+--no-animation            show a static scene
+```
+
+The fullscreen view shows an animated ASCII scene: a little house and a tree that changes with the seasons, with the sun moving along its arc, a crescent moon with twinkling and shooting stars, drifting clouds, fog, rain with puddles, snow, or thunderstorms. It uses only text colors, so it also looks right in terminals with a transparent background. Next to it are the current temperature, feels-like temperature, wind, humidity, UV index, sunrise and sunset, air quality and pollen, then an hourly and a 7-day forecast. In small windows it shows only the scene and the temperature. While the screen is open, the weather is fetched again every 10 minutes.
+
+When the output is piped or redirected (`weather berlin | less`), a plain text forecast is printed instead of the fullscreen view. Set the [`NO_COLOR`](https://no-color.org) environment variable to turn the colors off.
 
 ## Settings
 

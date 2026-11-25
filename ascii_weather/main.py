@@ -1,4 +1,5 @@
-"""The 'weather' command: fetches the weather and shows it fullscreen until a key is pressed."""
+"""The 'weather' command: fetches the weather and shows it fullscreen until a key is pressed,
+or prints it as plain text when the output is piped or redirected."""
 
 import math
 import sys
@@ -9,65 +10,170 @@ from datetime import datetime, timedelta, timezone
 from . import api, art, settings, term, update
 
 HELP = """\
-weather              weather for your location
-weather <city>       weather for a city, e.g. "weather new york" or "weather paris, texas"
-weather settings     home location, units, time format, animations
+ascii-weather - cute animated ASCII weather for your terminal
 
-Press any key to close the weather screen."""
+Usage:
+  weather [city] [flags]      weather for a city, or for your location without one
+
+Commands:
+  weather <city>              e.g. "weather new york" or "weather paris, texas"
+  weather settings            home location, units, time format, animations
+  weather help                this help
+
+Flags:
+  -h, --help                  this help
+  -V, --version               the installed version
+  --units metric|imperial     °C and km/h, or °F and mph, for this run
+  --12h, --24h                time format, for this run
+  --no-animation              show a static scene, for this run
+
+With no city, the weather is shown for your location, or for the home location from the
+settings. The weather screen refreshes itself every 10 minutes; press any key to go back.
+When the output is piped or redirected, a plain text forecast is printed instead."""
 
 WIND_DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
+REFRESH_AFTER = 10 * 60  # seconds before the weather is fetched again while the screen is open
+
 
 def main():
-    args = sys.argv[1:]
-    if args[:1] in (["-h"], ["--help"]):
-        print(HELP)
-        return
-    if args[:1] in (["-V"], ["--version"]):
-        print(f"ascii-weather {update.installed_version() or 'dev'}")
-        return
-    for arg in args:
-        if arg.startswith("-") and len(arg) > 1:
-            print(f"weather: unknown option '{arg}' (try 'weather --help')", file=sys.stderr)
-            sys.exit(1)
     config = settings.load_config()
     try:
-        if args == ["settings"]:
-            settings.run(config)
-        else:
-            show_weather(config, " ".join(args).strip())
+        code = run(config, sys.argv[1:])
     except KeyboardInterrupt:
-        pass
+        code = 130
+    if code:
+        sys.exit(code)
 
 
-def show_weather(config, query):
+def run(config, args):
+    """Handle the command line. Returns an exit code, or None for success."""
+    command = None
+    query = []
+    overrides = {}  # config values that hold for this run only, so they are never saved
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("-h", "--help"):
+            print(HELP)
+            return
+        if arg in ("-V", "--version"):
+            print(f"ascii-weather {update.installed_version() or 'dev'}")
+            return
+        if arg == "--units":
+            i += 1
+            if i < len(args) and args[i].lower() in ("metric", "imperial"):
+                overrides["units"] = args[i].lower()
+            else:
+                print("weather: --units needs 'metric' or 'imperial'", file=sys.stderr)
+                return 1
+        elif arg == "--12h":
+            overrides["time_format"] = "12h"
+        elif arg == "--24h":
+            overrides["time_format"] = "24h"
+        elif arg == "--no-animation":
+            overrides["animations"] = False
+        elif arg.startswith("-") and len(arg) > 1:
+            print(f"weather: unknown option '{arg}' (try 'weather --help')", file=sys.stderr)
+            return 1
+        elif arg in ("help", "settings") and command is None and not query:
+            command = arg
+        else:
+            query.append(arg)
+        i += 1
+
+    if command == "help":
+        print(HELP)
+        return
+    if command == "settings":
+        if not sys.stdout.isatty():
+            print("weather: 'weather settings' needs an interactive terminal", file=sys.stderr)
+            return 1
+        settings.run(config)
+        return
+    show = show_weather if sys.stdout.isatty() else print_weather
+    return show(config, " ".join(query).strip(), overrides)
+
+
+def show_weather(config, query, overrides=None):
+    """The fullscreen view. Fetches fresh weather every 10 minutes while it is open."""
     checker = update.UpdateCheck(config)
-    result = {}
+    display = {**config, **(overrides or {})}
+    state = {}
 
     def fetch():
+        state["fetching"] = True
         try:
-            result["data"] = api.get_weather(query, config)
+            state["data"] = api.get_weather(query, display)
+            state.pop("error", None)
         except api.WeatherError as error:
-            result["error"] = str(error)
+            if "data" not in state:  # when a refresh fails, keep showing the weather we have
+                state["error"] = str(error)
         except Exception as error:  # without this, a crash here would leave the loading screen up forever
-            result["error"] = f"Something went wrong: {error}"
+            if "data" not in state:
+                state["error"] = f"Something went wrong: {error}"
+        state["fetching"] = False
 
     threading.Thread(target=fetch, daemon=True).start()
+    fetched_at = time.monotonic()
     start = time.monotonic()
     with term.Screen() as screen:
         while True:
+            if not state.get("fetching") and time.monotonic() - fetched_at > REFRESH_AFTER:
+                state["fetching"] = True
+                fetched_at = time.monotonic()
+                threading.Thread(target=fetch, daemon=True).start()
             cols, rows = term.size()
             canvas = term.Canvas(cols, rows)
             t = time.monotonic() - start
-            if "data" in result:
-                draw_weather(canvas, result["data"], config, t if config["animations"] else 0)
-            elif "error" in result:
-                art.draw_error(canvas, result["error"], t)
+            if "data" in state:
+                draw_weather(canvas, state["data"], display, t if display["animations"] else 0)
+            elif "error" in state:
+                art.draw_error(canvas, state["error"], t)
             else:
                 art.draw_loading(canvas, t)
             screen.draw(canvas)
             if term.get_key(0.1):
                 break
+    checker.finish()
+
+
+def print_weather(config, query, overrides=None):
+    """A plain text forecast, for when the output is piped or redirected."""
+    checker = update.UpdateCheck(config)
+    display = {**config, **(overrides or {})}
+    try:
+        data = api.get_weather(query, display)
+    except api.WeatherError as error:
+        print(f"weather: {error}", file=sys.stderr)
+        checker.finish()
+        return 1
+    current, hourly, daily = data["current"], data["hourly"], data["daily"]
+    unit = "°F" if data["imperial"] else "°C"
+    description = art.DESCRIPTIONS.get(current["weather_code"], "")
+    print(f"{data['place']}: {description} {fmt(current['temperature_2m'])}{unit}, "
+          f"feels like {fmt(current['apparent_temperature'])}{unit}")
+    line = f"wind {fmt(current['wind_speed_10m'])} {'mph' if data['imperial'] else 'km/h'}"
+    if current["wind_direction_10m"] is not None:
+        line += f" {compass(current['wind_direction_10m'])}"
+    print(f"{line} · humidity {fmt(current['relative_humidity_2m'])}% · UV max {uv_text(daily['uv_index_max'][0])[0]}")
+    print(f"sunrise {sun_time(daily['sunrise'][0], display)} · sunset {sun_time(daily['sunset'][0], display)}")
+    if data["air"] and data["air"].get("european_aqi") is not None:
+        print(f"air quality {aqi_text(data['air']['european_aqi'])[0]} (European AQI)")
+    hours = []
+    start = current_hour_index(data)
+    for i in range(start, min(start + 12, len(hourly["time"]))):
+        moment = datetime.fromisoformat(hourly["time"][i])
+        hours.append(f"{hour_label(moment, display)} {fmt(hourly['temperature_2m'][i])}°")
+    if hours:
+        print("next hours: " + " · ".join(hours))
+    days = []
+    for n in range(min(7, len(daily["time"]))):
+        day = datetime.fromisoformat(daily["time"][n])
+        name = "today" if n == 0 else day.strftime("%a")
+        days.append(f"{name} {fmt(daily['temperature_2m_max'][n])}/{fmt(daily['temperature_2m_min'][n])}°")
+    if days:
+        print("next days: " + " · ".join(days))
     checker.finish()
 
 

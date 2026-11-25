@@ -19,6 +19,8 @@ COLORS = {
     "bright_magenta": 95, "bright_cyan": 96, "bright_white": 97,
 }
 
+NO_COLOR = bool(os.environ.get("NO_COLOR"))  # https://no-color.org
+
 KEYS = {"\r": "enter", "\n": "enter", "\x1b": "esc", "\x08": "backspace", "\x7f": "backspace"}
 WINDOWS_ARROWS = {"H": "up", "P": "down", "K": "left", "M": "right"}
 POSIX_ARROWS = {"[A": "up", "[B": "down", "[C": "right", "[D": "left", "OA": "up", "OB": "down", "OC": "right", "OD": "left"}
@@ -86,6 +88,8 @@ class Canvas:
 @functools.lru_cache(maxsize=None)
 def style(color):
     """Escape code for a text color (ANSI name or (r, g, b), None for the default)."""
+    if NO_COLOR:
+        return ""
     if isinstance(color, tuple):
         return f"\x1b[0;38;2;{color[0]};{color[1]};{color[2]}m"
     if color:
@@ -167,6 +171,8 @@ def get_key(timeout):
     if not select.select([fd], [], [], timeout)[0]:
         return None
     char = os.read(fd, 1).decode(errors="ignore")
+    if not char:
+        return "esc"  # end of input (e.g. "weather < /dev/null"): leave the screen instead of looping
     if char != "\x1b":
         return KEYS.get(char, char)
     sequence = ""
