@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ascii-weather"
+version = "0.1.0"
+description = "Cute animated ASCII weather and forecast for your terminal"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE.md"]
+authors = [{ name = "cweeper" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/cweeperde/ascii-weather"
+Author = "https://github.com/cweeperde"
+
+[project.scripts]
+weather = "ascii_weather.main:main"
+
+[tool.setuptools]
+packages = ["ascii_weather"]
