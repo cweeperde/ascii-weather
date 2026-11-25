@@ -2,15 +2,9 @@
 
 Cute animated ASCII weather for your terminal. Type `weather` and you get the current weather, the next 24 hours and the next 7 days in a fullscreen view. Press any key and you're back in your terminal, with everything that was there before.
 
-```
-       \    |    /
-    '.   .-----.   .'
-        /:::::::\
-  ---  |:::::::::|  ---
-        \:::::::/
-    .'   '-----'   '.
-       /    |    \
-```
+![ascii-weather showing sun, wind, rain, a thunderstorm, snow and a starry night](docs/demo.gif)
+
+*The demo uses made-up weather for a made-up town to show off the different scenes.*
 
 ## Install
 
