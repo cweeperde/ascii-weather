@@ -66,7 +66,37 @@ class UpdateCheck:
             self.thread.join(3)  # a check that just finished should not be lost
             if not self.thread.is_alive():
                 settings.save_config(self.config)
-        latest = self.config.get("latest_version")
-        if self.current and latest and not is_editable_install() and parse_version(latest) > parse_version(self.current):
-            print(f"[notice] A new release of ascii-weather is available: {self.current} -> {latest}")
-            print(f"[notice] To update, run: {UPDATE_COMMAND}")
+        print_notice(self.current, self.config.get("latest_version"))
+
+
+def print_notice(current, latest):
+    """Print the update notice, like pip does, when a newer version is out."""
+    if current and latest and not is_editable_install() and parse_version(latest) > parse_version(current):
+        print(f"[notice] A new release of ascii-weather is available: {current} -> {latest}")
+        print(f"[notice] To update, run: {UPDATE_COMMAND}")
+
+
+def check_now(config):
+    """Look up the newest version on demand, from the settings menu. Saves the result and returns a status
+    line and its color."""
+    current = installed_version()
+    if not current:
+        return "Couldn't find the installed version.", "bright_red"
+    if is_editable_install():
+        return "Editable install: you already run the newest code.", "gray"
+    try:
+        request = urllib.request.Request(VERSION_URL, headers=api.HEADERS)
+        with urllib.request.urlopen(request, timeout=10) as response:
+            text = response.read().decode("utf-8", errors="ignore")
+    except OSError:
+        return "Can't reach GitHub. Are you online?", "bright_red"
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not match:
+        return "Couldn't read the version from GitHub.", "bright_red"
+    latest = match.group(1)
+    config["latest_version"] = latest
+    config["last_update_check"] = time.time()
+    settings.save_config(config)
+    if parse_version(latest) > parse_version(current):
+        return f"Update available: {current} -> {latest}!", "bright_yellow"
+    return f"You're up to date ({current}).", "bright_green"

@@ -22,6 +22,7 @@ ITEMS = [
     ("units", "Units"),
     ("time_format", "Time format"),
     ("animations", "Animations"),
+    ("update", "Check for updates"),
 ]
 
 
@@ -92,7 +93,7 @@ def draw(screen, config, selected, typing, status, t):
     cols, rows = term.size()
     canvas = term.Canvas(cols, rows)
     x = max(0, (cols - PANEL_WIDTH) // 2)
-    y = max(0, (rows - 21) // 2)
+    y = max(0, (rows - 22) // 2)
 
     # Mascot and a title whose colors flow like a rainbow.
     art.draw_cloud(canvas, x + 15, y + 1 + round(math.sin(t * 2)), "day")
@@ -101,7 +102,7 @@ def draw(screen, config, selected, typing, status, t):
     canvas.put(x + 33, y + 3, "settings", "gray")
     canvas.put(x + 47, y + 1, "*+"[int(t * 2) % 2], "bright_yellow")
 
-    canvas.box(x, y + 7, PANEL_WIDTH, 8, "bright_cyan")
+    canvas.box(x, y + 7, PANEL_WIDTH, 9, "bright_cyan")
     for i, (key, label) in enumerate(ITEMS):
         row = y + 9 + i
         active = i == selected
@@ -113,6 +114,9 @@ def draw(screen, config, selected, typing, status, t):
             canvas.put(value_x, row, f"[ {typing}{caret}".ljust(30) + "]", "bright_white")
         elif key == "animations":
             canvas.put(value_x, row, "[x] on" if config[key] else "[ ] off", "bright_green" if config[key] else "gray")
+        elif key == "update":
+            text = "check now"
+            canvas.put(value_x, row, f"< {text} >" if active else f"  {text}", "bright_yellow")
         else:
             text = value_text(config, key)
             canvas.put(value_x, row, f"< {text} >" if active else f"  {text}", "bright_yellow")
@@ -123,16 +127,18 @@ def draw(screen, config, selected, typing, status, t):
         hints = [("↑↓", "move"), ("Enter", "change"), ("Esc", "exit")]
     hint_x = x + 2
     for key_name, action in hints:
-        canvas.put(hint_x, y + 16, f"[{key_name}]", "white")
-        canvas.put(hint_x + len(key_name) + 3, y + 16, action, "gray")
+        canvas.put(hint_x, y + 17, f"[{key_name}]", "white")
+        canvas.put(hint_x + len(key_name) + 3, y + 17, action, "gray")
         hint_x += len(key_name) + len(action) + 6
     text, color = status
     if text:
-        canvas.put(x + 2, y + 18, {"bright_green": "√ ", "bright_red": "! "}.get(color, "") + text, color)
+        canvas.put(x + 2, y + 19, {"bright_green": "√ ", "bright_red": "! "}.get(color, "") + text, color)
     screen.draw(canvas)
 
 
 def run(config):
+    from . import update  # local import: update.py imports this module too
+
     selected = 0
     typing = None  # the city being typed for the home location, None while not typing
     status = ("", None)
@@ -166,5 +172,8 @@ def run(config):
                 status = ("", None)
                 if name == "home":
                     typing = ""
+                elif name == "update":
+                    draw(screen, config, selected, typing, ("Checking GitHub...", "gray"), time.monotonic() - start)
+                    status = update.check_now(config)
                 else:
                     toggle(config, name)

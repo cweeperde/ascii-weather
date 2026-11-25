@@ -90,6 +90,7 @@ def run(config, args):
             print("weather: 'weather settings' needs an interactive terminal", file=sys.stderr)
             return 1
         settings.run(config)
+        update.print_notice(update.installed_version(), config.get("latest_version"))
         return
     show = show_weather if sys.stdout.isatty() else print_weather
     return show(config, " ".join(query).strip(), overrides)
